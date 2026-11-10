@@ -1,0 +1,52 @@
+-- 花木共创 · 对象存储桶与权限
+--
+-- 需要两个桶（名称须与 config.js 的 buckets 一致）：
+--   demo-images : 地图图片、作品图片，公开读
+--   demo-voice  : 村民语音意见，私有读，后台通过签名 URL 播放
+--
+-- 建议优先在云控制台创建桶并设置权限；下面的 SQL 是兼容 Supabase storage
+-- 架构的等价写法，不同云厂商的 schema 可能不同，如报「relation does not exist」
+-- 请跳过本文件，改用控制台配置。
+--
+-- 桶大小建议：图片桶单文件 <= 10MB，语音桶单文件 <= 10MB，
+-- 并限制允许的 MIME 类型（image/*、audio/*），避免被当作免费图床滥用。
+
+-- ---------- 桶定义（Supabase 兼容写法，可选） ----------
+-- insert into storage.buckets (id, name, public, file_size_limit)
+-- values ('demo-images', 'demo-images', true,  10485760)
+-- on conflict (id) do nothing;
+-- insert into storage.buckets (id, name, public, file_size_limit)
+-- values ('demo-voice',  'demo-voice',  false, 10485760)
+-- on conflict (id) do nothing;
+
+-- ---------- storage.objects 策略（Supabase 兼容写法，可选） ----------
+-- alter table storage.objects enable row level security;
+--
+-- drop policy if exists images_public_read on storage.objects;
+-- create policy images_public_read on storage.objects
+--   for select to anon, authenticated using (bucket_id = 'demo-images');
+--
+-- drop policy if exists images_editor_write on storage.objects;
+-- create policy images_editor_write on storage.objects
+--   for all to authenticated
+--   using (bucket_id = 'demo-images' and public.is_editor())
+--   with check (bucket_id = 'demo-images' and public.is_editor());
+--
+-- drop policy if exists voice_anonymous_upload on storage.objects;
+-- create policy voice_anonymous_upload on storage.objects
+--   for insert to anon, authenticated with check (bucket_id = 'demo-voice');
+--
+-- drop policy if exists voice_editor_read on storage.objects;
+-- create policy voice_editor_read on storage.objects
+--   for select to authenticated
+--   using (bucket_id = 'demo-voice' and public.is_editor());
+--
+-- drop policy if exists voice_editor_delete on storage.objects;
+-- create policy voice_editor_delete on storage.objects
+--   for delete to authenticated
+--   using (bucket_id = 'demo-voice' and public.is_editor());
+
+-- 控制台等价配置清单（若不用上面的 SQL）：
+--   [demo-images] 公开读；仅编辑者可上传 / 覆盖 / 删除
+--   [demo-voice ] 私有；匿名与登录用户可上传；仅编辑者可读取、生成签名 URL、删除
+--   两个桶均开启文件大小与 MIME 类型限制

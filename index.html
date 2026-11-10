@@ -1,0 +1,1420 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
+<title>花木共创 · 花木村地图</title>
+<script src="https://static.cloudbase.net/cloudbase-js-sdk/latest/cloudbase.full.js"></script>
+<script src="./config.js"></script>
+<style>
+  /* ---------- 颜色变量：默认浅色模式 ---------- */
+  :root {
+    --bg-main: #f5f6f8;
+    --bg-header: #ffffff;
+    --bg-card: #1a1a1a; 
+    --bg-panel: #ffffff;
+    --bg-mask: rgba(0,0,0,0.6);
+    
+    --text-main: #333333;
+    --text-sub: #666666;
+    --border-color: #e5e5e5;
+    
+    --btn-bg: #e4e4e4;
+    --btn-text: #333333;
+  }
+
+  /* ---------- 颜色变量：深色模式 ---------- */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg-main: #111111;
+      --bg-header: #1b1b1b;
+      --bg-card: #000000;
+      --bg-panel: #1e1e1e;
+      --bg-mask: rgba(0,0,0,0.8);
+      
+      --text-main: #eeeeee;
+      --text-sub: #999999;
+      --border-color: #333333;
+      
+      --btn-bg: #333333;
+      --btn-text: #ffffff;
+    }
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+    font-family: -apple-system, "PingFang SC", sans-serif; 
+    background: var(--bg-main); color: var(--text-main); 
+    transition: background-color 0.3s, color 0.3s;
+  }
+  body { display: flex; flex-direction: column; }
+
+  header { 
+    flex-shrink: 0; z-index: 50; 
+    display: flex; gap: 8px; flex-wrap: wrap; align-items: center; 
+    padding: 10px 12px; background: var(--bg-header); border-bottom: 1px solid var(--border-color); 
+  }
+  header h1 { font-size: 24px; margin: 0 8px 0 0; }
+  
+  button { 
+    border: 0; border-radius: 8px; padding: 9px 14px; font-size: 15px; 
+    background: #2d6cdf; color: #fff; cursor: pointer; 
+  }
+  button.ghost { background: var(--btn-bg); color: var(--btn-text); }
+  button.danger { background: #b33; color: #fff; }
+  
+  #mapWrap { 
+    flex: 1; position: relative; width: 100%; overflow: hidden; 
+    background: var(--bg-card); touch-action: none; 
+  }
+  
+  #mapContainer {
+    position: absolute; top: 0; left: 0;
+    transform-origin: 0 0;
+    will-change: transform;
+  }
+
+  #mapImg { 
+    display: block; max-width: none; max-height: none;
+    user-select: none; -webkit-user-drag: none; 
+  }
+  
+  #emptyTip { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: var(--text-sub); line-height: 1.8; width: 100%; font-size:22px; font-weight:700;}
+  
+  .marker { 
+    position: absolute; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%; 
+    background: rgba(255,106,0,.9); border: 2px solid #fff; color: #fff; font-size: 14px; font-weight: 700; 
+    display: flex; align-items: center; justify-content: center; cursor: pointer; 
+    box-shadow: 0 0 0 0 rgba(255,106,0,.7); animation: pulse 2s infinite; 
+  }
+  .marker.voted { background: #2a9d4a; animation: none; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255,106,0,.7); } 70% { box-shadow: 0 0 0 16px rgba(255,106,0,0); } 100% { box-shadow: 0 0 0 0 rgba(255,106,0,0); } }
+
+  .zoom-controls {
+    position: absolute; right: 20px; bottom: 20px;
+    display: flex; flex-direction: column; gap: 8px; z-index: 40;
+  }
+  .zoom-controls button {
+    width: 44px; height: 44px; border-radius: 50%;
+    background: var(--bg-header); color: var(--text-main);
+    font-size: 24px; font-weight: bold; display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3); border: 1px solid var(--border-color);
+    padding: 0; opacity: 0.9;
+  }
+  .zoom-controls button:active { background: var(--btn-bg); }
+  .zoom-controls button.reset-btn { font-size: 14px; }
+
+  /* ================== 弹窗面板 ================== */
+  #panelMask { position: fixed; inset: 0; background: var(--bg-mask); z-index: 100; display: none; align-items: center; justify-content: center; padding: 20px; }
+  #panelMask.show { display: flex; }
+  
+  #panel { 
+    width: 100%; max-width: 1000px; 
+    background: var(--bg-panel); border-radius: 24px; 
+    padding: 45px 40px; 
+    position: relative; box-shadow: 0 20px 60px rgba(0,0,0,0.4); 
+    max-height: 92vh; overflow-y: auto; border: 1px solid var(--border-color); 
+  }
+  
+  #closePanel { position: absolute; top: 16px; right: 18px; width: 54px; height: 54px; padding: 0; font-size: 30px; z-index: 10; border-radius: 50%; }
+  
+  #panelTitle { font-size: 34px !important; margin: 0 65px 22px 0 !important; font-weight: bold; text-align: center; }
+  #spotEditorActions { display:flex; align-items:center; justify-content:center; gap:10px; margin:-8px 0 14px; }
+  #spotEditorActions span { color:var(--text-sub); font-size:13px; }
+#renameSpotInput { width:min(240px, 55vw); min-width:120px; padding:9px 10px; border:1px solid #cbd4bd; border-radius:8px; color:#263f2f; font-size:14px; }
+
+  .flex-row { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 14px; margin: 16px auto 20px; width: 100%; align-items: stretch; }
+  
+  .work-card, .voice-card { 
+    flex: 1; max-width: 220px; 
+    background: var(--bg-main); border-radius: 18px; padding: 15px; 
+    border: 4px solid transparent; cursor: pointer; transition: all 0.2s; 
+    display: flex; flex-direction: column; align-items: center; justify-content: center; 
+  }
+  .work-card.selected { border-color: #2d6cdf; background: rgba(45,108,223,0.15); transform: scale(1.05); }
+  .work-card.locked { opacity: 0.6; cursor: not-allowed; }
+  
+  .work-img { width: 100%; aspect-ratio: 1/1; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: clamp(52px,8vw,96px); font-weight: bold; color: #fff; box-shadow: inset 0 -20px 30px #0001; overflow:hidden; position:relative; }
+  .work-img img { width:100%; height:100%; object-fit:cover; display:block; }
+  .work-card.editor-photo { cursor:pointer; border-style:dashed; border-color:#86a78a; }
+  .work-card.editor-photo .card-label { color:#3f7357; }
+  .img-1 { background: radial-gradient(ellipse at 50% 88%,#7b5736 0 10%,transparent 11%),linear-gradient(180deg,#b9d9e6 0 49%,#a7c783 50% 70%,#e4c779 71%); }
+  .img-2 { background: radial-gradient(circle at 50% 40%,#71955b 0 23%,transparent 24%),linear-gradient(180deg,#c6e4ec 0 49%,#8db5b1 50% 64%,#d4c89b 65%); }
+  .img-3 { background: linear-gradient(135deg,transparent 45%,#9b7854 46% 52%,transparent 53%),radial-gradient(circle at 50% 58%,#77a966 0 24%,transparent 25%),linear-gradient(180deg,#bedce7 0 48%,#d8ca8a 49%); }
+
+  .voice-card .icon { font-size: clamp(60px,9vw,100px); margin-bottom: 8px; }
+  .voice-card .text { font-size: 22px; color: #ff7b00; font-weight: bold; text-align:center; }
+  .voice-card.recording { border-color: #f33; background: rgba(255,0,0,0.15); animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity: 0.6; } }
+
+  .audio-player { width: 100%; height: 55px; margin-top: 10px; }
+  
+  .action-area { margin-top: 12px; text-align: center; }
+  #submitBtn { 
+    width: 100%; max-width: 500px; 
+    padding: 22px; font-size: 28px; font-weight: bold; border-radius: 16px; 
+    background: #2a9d4a; color: #fff; display: none; box-shadow: 0 8px 20px rgba(42,157,74,0.4); 
+  }
+  #submitBtn.show { display: block; }
+  .voted-msg { color: #2a9d4a; font-size: 28px; font-weight: bold; display: none; }
+  .voted-msg.show { display: block; }
+
+  .hidden { display: none !important; }
+  #editorTools { display:flex; align-items:center; gap:7px; flex-wrap:wrap; }
+  #editorTools.hidden { display:none; }
+  #roleLabel { color:var(--text-sub); font-size:14px; margin-left:auto; white-space:nowrap; }
+  .card-label { font-size: clamp(15px,2vw,21px); font-weight: 700; margin-top: 10px; text-align:center; }
+  .voice-card { background:#fff3e8; border:2px solid #f0dccb; }
+  .voice-card.selected { border-color:#df8153; background:#fff0e5; }
+  .voice-card.recording { border-color:#e04f40; background:#ffebe7; }
+  @media (max-width:768px) and (orientation:landscape){ #panel{max-height:98vh;padding:42px 14px 10px}.work-card,.voice-card{min-height:0}.work-img{max-height:34vh} }
+  /* 按手机宽高比例调整地图和投票面板 */
+  @media (max-width: 700px) {
+    html, body { width: 100%; height: 100%; height: 100dvh; overflow: hidden; }
+    body { min-height: 0; }
+    header { flex: 0 0 auto; min-height: 56px; padding: 6px 8px; gap: 6px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+    header::-webkit-scrollbar { display: none; }
+    header h1 { flex: 0 0 auto; font-size: 19px; white-space: nowrap; margin-right: auto; }
+    header label, header button { flex: 0 0 auto; min-height: 42px; padding: 8px 10px !important; font-size: 14px !important; white-space: nowrap; }
+    #mapWrap { flex: 1 1 auto; min-height: 0; height: 0; }
+    #emptyTip { width: 88%; font-size: clamp(18px, 5vw, 24px); }
+    .marker { width: 42px; height: 42px; margin: -21px 0 0 -21px; font-size: 17px; }
+    .zoom-controls { right: 12px; bottom: max(14px, env(safe-area-inset-bottom)); gap: 9px; }
+    .zoom-controls button { width: 50px; height: 50px; font-size: 28px; }
+    .zoom-controls button.reset-btn { width: 50px; font-size: 13px; }
+    #panelMask { align-items: flex-end; padding: 0; }
+    #panel { width: 100%; max-width: none; max-height: 84vh; max-height: 84dvh; overflow-y: auto; overscroll-behavior: contain; padding: 52px 12px max(14px, env(safe-area-inset-bottom)); border-radius: 22px 22px 0 0; }
+    #closePanel { top: 8px; right: 10px; width: 46px; height: 46px; font-size: 27px; }
+    #panelTitle { font-size: clamp(23px, 6vw, 29px) !important; margin: 0 52px 12px 0 !important; }
+    .flex-row { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin: 8px auto 12px; }
+    .work-card, .voice-card { min-width: 0; min-height: 0; padding: 7px; border-width: 2px; border-radius: 13px; }
+    .work-card.selected { transform: none; }
+    .work-img { width: 100%; aspect-ratio: 1 / 1; border-radius: 9px; font-size: clamp(30px, 11vw, 64px); }
+    .card-label { margin-top: 7px; font-size: clamp(12px, 3.5vw, 16px); line-height: 1.2; }
+    .voice-card .icon { font-size: clamp(34px, 10vw, 58px); margin-bottom: 5px; }
+    .voice-card .text { font-size: clamp(12px, 3.5vw, 16px); line-height: 1.2; }
+    .audio-player { height: 34px; margin-top: 6px; }
+    .action-area { margin-top: 10px; }
+    #submitBtn { min-height: 54px; max-width: none; padding: 13px; font-size: 20px; border-radius: 13px; }
+    .voted-msg { font-size: 19px; line-height: 1.4; }
+  }
+  @media (max-width: 700px) and (max-height: 740px) {
+    header { min-height: 50px; }
+    #panel { max-height: 90vh; max-height: 90dvh; padding-top: 46px; }
+    #panelTitle { margin-bottom: 8px !important; }
+    .flex-row { margin-top: 5px; margin-bottom: 8px; }
+    .work-card, .voice-card { padding: 5px; }
+    .card-label { margin-top: 5px; }
+    #submitBtn { min-height: 48px; }
+  }
+  @media (max-width: 380px) {
+    header { gap: 5px; }
+    header h1 { font-size: 17px; }
+    header label, header button { padding: 7px 8px !important; font-size: 13px !important; }
+    #panel { padding-left: 8px; padding-right: 8px; }
+    .flex-row { gap: 5px; }
+    .card-label { font-size: 12px; }
+  }
+  @media (max-width: 700px) and (orientation: landscape) {
+    #panel { max-height: 96vh; max-height: 96dvh; padding-top: 44px; }
+    .flex-row { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .work-img { width: min(100%, 22vh); max-height: 22vh; }
+    .work-card, .voice-card { flex-direction: row; gap: 7px; justify-content: center; }
+    .card-label { margin: 0; }
+    .voice-card { flex-direction: column; }
+  }
+
+
+/* ===== 共创地图视觉主题：只调整布局与视觉，不改变投票/管理数据逻辑 ===== */
+:root{--bg-main:#f5f6f0;--bg-header:#fff;--bg-card:#f2f4ed;--bg-panel:#fff;--bg-mask:rgba(25,43,33,.48);--text-main:#263c30;--text-sub:#809086;--border-color:#e4e8df;--btn-bg:#edf1e8;--btn-text:#355642}
+@media(prefers-color-scheme:dark){:root{--bg-main:#f5f6f0;--bg-header:#fff;--bg-card:#f2f4ed;--bg-panel:#fff;--bg-mask:rgba(25,43,33,.48);--text-main:#263c30;--text-sub:#809086;--border-color:#e4e8df;--btn-bg:#edf1e8;--btn-text:#355642}}
+html,body{background:#f5f6f0;color:#263c30;font-family:"Microsoft YaHei",-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;transition:none}
+.site-header{height:80px;min-height:80px;padding:0 32px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:24px;background:#fff;border-bottom:1px solid #e9ece5;z-index:50}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}.brand-mark{width:48px;height:48px;border-radius:15px;background:#244b35;color:#d7e4c5;display:grid;place-items:center;font-size:28px}.brand h1{font-size:23px;letter-spacing:2px;margin:0;color:#254735}.brand small{display:block;margin-top:3px;font-size:10px;letter-spacing:3px;color:#869387}
+.main-nav{height:100%;display:flex;align-items:stretch;gap:30px}.main-nav a,.nav-guide{display:flex;align-items:center;text-decoration:none;color:#869187;background:none;border:0;border-radius:0;padding:0 8px;font-size:15px;white-space:nowrap}.main-nav a.active{color:#244b35;font-weight:700;border-bottom:3px solid #315d43}.nav-guide{cursor:pointer}.header-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;min-width:0}.experience{display:inline-flex;align-items:center;gap:7px;background:#f2f5ed;color:#71856b;padding:9px 12px;border-radius:8px;font-size:12px;white-space:nowrap}.experience i,.live-dot{width:7px;height:7px;border-radius:50%;background:#70956c;display:inline-block}.header-actions #roleLabel{font-size:13px;color:#708078;white-space:nowrap}.header-actions button,.upload-map{border-radius:8px!important;background:#edf1e8!important;color:#355642!important;padding:9px 12px!important;font-size:13px!important;white-space:nowrap}.header-actions button.danger{background:#f8e9e6!important;color:#9b5149!important}#editorTools{gap:6px}
+#appShell{display:grid;grid-template-columns:340px minmax(0,1fr);flex:1;min-height:0;overflow:hidden}#villageSidebar{display:flex;flex-direction:column;min-height:0;background:#fbfcf7;border-right:1px solid #e7ebe3;padding:34px 24px 18px 28px}.side-intro .eyebrow{font-size:11px;letter-spacing:2px;color:#92a18f;margin-bottom:24px}.side-intro h2{font-family:"Noto Serif SC","Songti SC",serif;font-weight:500;font-size:29px;line-height:1.55;letter-spacing:1px;margin:0;color:#263b30}.side-intro h2 span{color:#c99c61}.side-intro p{font-size:13px;line-height:1.85;color:#8a978c;margin:16px 0 24px}.side-stats{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid #e6e9e1;border-bottom:1px solid #e6e9e1;padding:15px 0 13px;margin-bottom:18px}.side-stats div{display:flex;flex-direction:column;gap:4px}.side-stats strong{font-family:Georgia,serif;font-size:26px;font-weight:500;color:#315340}.side-stats span{font-size:11px;color:#8b978b}.point-list-heading{display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:13px}.point-list-heading strong{font-size:14px}.point-list-heading>span{font-size:11px;color:#7f917e}.point-list-heading small{margin-left:auto;color:#9aa598;font-size:11px}.spot-list{overflow:auto;min-height:80px;flex:1;display:flex;flex-direction:column;gap:7px;padding-right:3px}.spot-list::-webkit-scrollbar{width:4px}.spot-list::-webkit-scrollbar-thumb{background:#d8dfd5;border-radius:4px}.spot-row{display:grid;grid-template-columns:46px minmax(0,1fr) 20px;align-items:center;gap:10px;width:100%;padding:10px 7px;border:0;border-radius:11px;background:transparent;color:#31493a;text-align:left;cursor:pointer}.spot-row:hover{background:#f0f3eb}.spot-icon{width:42px;height:42px;border-radius:10px;display:grid;place-items:center;background:#f0eadc;color:#b39163;font-size:20px}.spot-row:nth-child(3n+2) .spot-icon{background:#e8efeb;color:#769589}.spot-row:nth-child(3n) .spot-icon{background:#edf1e5;color:#839574}.spot-copy{min-width:0}.spot-copy strong{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.spot-copy small{display:block;margin-top:5px;font-size:11px;color:#9aa498}.spot-arrow{color:#a6b0a4;font-size:22px}.list-empty{font-size:12px;color:#9aa498;padding:12px 4px}.side-footer{display:flex;align-items:center;gap:12px;border-top:1px solid #e7ebe3;margin-top:12px;padding:13px 0 0;color:#a0aa9d}.side-footer>span{font-size:27px;color:#a9b99a}.side-footer p{font-family:"Noto Serif SC","Songti SC",serif;font-size:12px;line-height:1.6;margin:0}
+#mapWrap{flex:none;width:100%;height:100%;min-height:0;position:relative;overflow:hidden;background-color:#f2f5ed;background-image:radial-gradient(#dce5d8 1px,transparent 1px);background-size:14px 14px;touch-action:none}#mapContainer{z-index:2}#mapImg{position:relative;z-index:1}.marker{z-index:3;width:44px;height:44px;margin:-22px;border:2px solid #315b42;background:#f7f8ed;color:#315b42;font-family:Georgia,serif;font-size:13px;box-shadow:0 3px 12px #1e39201a;animation:none}.marker.voted{background:#dce9cc;color:#294a36;border-color:#7e9d70}.marker:hover{transform:scale(1.08)}.map-meta{position:absolute;z-index:5;left:28px;top:24px;display:flex;align-items:center;gap:8px;padding:8px 11px;background:#f7f8f0de;border:1px solid #e4e9de;border-radius:7px;font-size:12px;color:#3c5743;pointer-events:none}.map-meta small{font-size:10px;color:#94a48c;border:1px solid #d7e0d1;padding:2px 4px}.map-hint{margin-left:8px;padding:5px 8px;border:1px solid #eadfb7;border-radius:5px;color:#a1884c;background:#fffdf3}.map-copy{position:absolute;z-index:4;left:34px;top:20%;display:flex;flex-direction:column;gap:16px;pointer-events:none;color:#526a58}.map-copy strong{font-family:"Noto Serif SC","Songti SC",serif;font-size:clamp(27px,3vw,42px);line-height:1.7;font-weight:500;letter-spacing:2px}.map-copy span{font-size:12px;line-height:1.8;color:#98a397}.map-copy b{font-size:28px;color:#a9b29e;font-weight:400}.compass{position:absolute;z-index:4;top:25px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;color:#596a5d;line-height:1}.compass small{font-family:Georgia,serif;font-size:9px}.compass span{font-size:30px}.map-bottom-note{position:absolute;z-index:5;left:28px;bottom:20px;display:flex;align-items:center;gap:8px;padding:9px 12px;background:#f8f9f2e8;border:1px solid #e4e9de;border-radius:7px;color:#788876;font-size:11px;pointer-events:none}.map-bottom-note i{height:14px;border-left:1px solid #d8dfd4;margin:0 5px}.zoom-controls{right:22px;bottom:20px;flex-direction:row;align-items:center;gap:0;background:#fff;border:1px solid #e7ebe2;border-radius:10px;padding:5px;box-shadow:0 5px 20px #1e39200d}.zoom-controls button{width:38px;height:34px;border:0;border-radius:6px;background:#fff;color:#45624d;font-size:20px;box-shadow:none;opacity:1}.zoom-controls button:hover{background:#f1f4ec}.zoom-controls #zoomPercent{min-width:48px;text-align:center;font-size:11px;color:#8c9989}.zoom-controls button.reset-btn{font-size:16px;border-left:1px solid #edf0e9;border-radius:0 6px 6px 0}
+#emptyTip{z-index:4;color:#849184;font-size:19px;font-weight:500}#panelMask{background:rgba(30,45,34,.48);backdrop-filter:blur(3px)}#panel{border-radius:20px;border:1px solid #e5e9df;box-shadow:0 24px 70px #173a251f}#closePanel{background:#edf1e8;color:#355642}#submitBtn{background:#315f43;box-shadow:0 8px 18px #315f4320}.work-card,.voice-card{background:#fbfcf7;border:1px solid #e6ebe2;border-radius:15px}.work-card.selected{border-color:#799b71;background:#f0f5e9;transform:translateY(-2px)}.voice-card{background:#f6f4eb}.voice-card.selected{border-color:#c5a56d;background:#fbf6e9}.voice-card.recording{border-color:#bd6b5d;background:#fff0ec}.work-card.locked,.voice-card.locked{opacity:.55}
+@media(max-width:900px){.site-header{grid-template-columns:1fr auto;padding:0 18px}.main-nav{display:none}.header-actions{gap:7px}#appShell{grid-template-columns:295px minmax(0,1fr)}#villageSidebar{padding-left:19px;padding-right:17px}.side-intro h2{font-size:25px}.map-copy{left:22px}.map-copy strong{font-size:30px}}
+@media(max-width:700px){html,body{height:100%;height:100dvh;overflow:hidden}.site-header{height:auto;min-height:62px;padding:6px 10px;display:flex;gap:7px;overflow-x:auto;overflow-y:hidden;flex-wrap:nowrap}.brand{gap:7px;flex:0 0 auto}.brand-mark{width:39px;height:39px;border-radius:12px;font-size:23px}.brand h1{font-size:17px;letter-spacing:1px}.brand small{font-size:8px;letter-spacing:2px}.header-actions{margin-left:auto;flex:0 0 auto}.experience{display:none}.header-actions #roleLabel{font-size:11px}.header-actions button,.upload-map{font-size:11px!important;padding:7px 8px!important;min-height:34px!important}#editorTools{gap:4px}#appShell{display:flex;flex-direction:column;min-height:0}.side-intro{display:none}#villageSidebar{order:1;flex:0 0 185px;min-height:185px;max-height:30dvh;padding:9px 11px 6px;border-right:0;border-bottom:1px solid #e5e9df}.side-stats{padding:3px 0 7px;margin:0 0 5px;border-top:0}.side-stats strong{font-size:19px}.side-stats span{font-size:9px}.point-list-heading{margin:0 0 3px;font-size:11px}.point-list-heading strong{font-size:12px}.spot-list{flex-direction:row;overflow-x:auto;overflow-y:hidden;flex:none;min-height:0;gap:5px;padding:0 0 4px}.spot-row{flex:0 0 190px;grid-template-columns:37px minmax(0,1fr) 14px;gap:7px;padding:6px}.spot-icon{width:34px;height:34px;font-size:16px;border-radius:8px}.spot-copy strong{font-size:11px}.spot-copy small{font-size:9px;margin-top:3px}.spot-arrow{font-size:17px}.side-footer{display:none}#mapWrap{order:2;flex:1 1 auto;height:0;min-height:0}.map-meta{left:10px;top:10px;gap:5px;padding:6px 7px;font-size:10px}.map-meta small{font-size:8px}.map-hint{display:none}.map-copy{left:12px;top:27%;gap:10px}.map-copy strong{font-size:clamp(20px,6vw,27px);letter-spacing:1px}.map-copy span{font-size:10px}.map-copy b{font-size:20px}.compass{top:11px;left:auto;right:15px;transform:none}.compass span{font-size:24px}.map-bottom-note{left:9px;bottom:10px;padding:6px 8px;font-size:9px}.zoom-controls{right:10px;bottom:10px}.zoom-controls button{width:33px;height:31px;font-size:18px}.zoom-controls #zoomPercent{min-width:39px;font-size:10px}}
+@media(max-width:700px) and (max-height:650px){#villageSidebar{flex-basis:150px;min-height:150px}.side-stats{padding-bottom:3px}.spot-row{flex-basis:160px}}
+
+
+/* 手机窄屏补充：给地图更多空间，并让管理员按钮换行显示而非挤出屏幕 */
+@media(max-width:700px){
+  .site-header{height:auto;min-height:62px;padding:7px 11px;gap:6px;overflow:visible;flex-wrap:wrap;}
+  .brand{flex:0 0 auto;}
+  .header-actions{flex:1 1 auto;min-width:0;flex-wrap:wrap;gap:6px;}
+  .header-actions #roleLabel{font-size:11px;}
+  #editorTools{flex:1 1 100%;flex-wrap:wrap;}
+  .header-actions button,.upload-map{min-height:38px!important;padding:8px 10px!important;font-size:12px!important;}
+  #villageSidebar{flex:0 0 158px;min-height:158px;max-height:31dvh;padding:8px 10px 5px;}
+  .side-stats{padding:2px 0 6px;margin-bottom:4px;}
+  .side-stats strong{font-size:20px;}
+  .point-list-heading{min-height:20px;margin-bottom:2px;}
+  .spot-row{flex-basis:176px;min-height:48px;padding:5px;}
+  .spot-icon{width:36px;height:36px;}
+  .map-bottom-note{bottom:max(9px,env(safe-area-inset-bottom));}
+  .zoom-controls{bottom:max(9px,env(safe-area-inset-bottom));}
+  #panelMask{padding-bottom:env(safe-area-inset-bottom);}
+}
+@media(max-width:700px) and (max-height:680px){
+  #villageSidebar{flex-basis:132px;min-height:132px;max-height:30dvh;padding:6px 9px 3px;}
+  .side-stats{padding:0 0 3px;}
+  .side-stats strong{font-size:17px;}
+  .spot-row{flex-basis:158px;min-height:42px;}
+  .spot-icon{width:31px;height:31px;}
+}
+
+
+/* 收窄顶栏，让地图主内容占比更大 */
+.site-header{height:68px;min-height:68px;padding-left:22px;padding-right:22px;gap:14px}
+.brand-mark{width:42px;height:42px;border-radius:13px;font-size:24px}
+.brand h1{font-size:20px;letter-spacing:1px}
+.main-nav{gap:20px}
+#appShell{grid-template-columns:305px minmax(0,1fr)}
+#villageSidebar{padding-left:23px;padding-right:18px}
+@media(max-width:900px){.site-header{height:auto;min-height:64px;padding-left:14px;padding-right:14px;gap:10px}#appShell{grid-template-columns:270px minmax(0,1fr)}}
+@media(max-width:700px){.site-header{min-height:54px;padding:5px 9px;gap:5px}.brand-mark{width:35px;height:35px;border-radius:10px;font-size:20px}.brand h1{font-size:15px}.brand small{font-size:7px;letter-spacing:1.5px}#villageSidebar{flex-basis:145px;min-height:145px;padding:6px 9px 4px}}
+@media(max-width:700px) and (max-height:680px){#villageSidebar{flex-basis:122px;min-height:122px}}
+
+
+/* 手机地图模式：隐藏常驻侧栏，以点位名称标签直接标在地图上；列表改为按需打开 */
+.marker .marker-index{display:inline}.marker .marker-label{display:none}
+.spot-list-toggle{display:none}
+@media(max-width:700px){
+  .site-header{height:auto;min-height:58px;padding:6px 9px;display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:42px 32px;gap:2px 8px;overflow:visible;align-content:center}
+  .brand{grid-column:1;grid-row:1;gap:7px}.brand-mark{width:35px;height:35px}.brand h1{font-size:16px}.brand small{font-size:7px;letter-spacing:1.5px}
+  .main-nav{grid-column:2;grid-row:1;display:flex;justify-content:flex-end;align-items:center;gap:4px;min-width:0;overflow:visible}
+  .main-nav .active{display:none}.nav-guide{display:flex;padding:4px 6px;font-size:11px;white-space:nowrap}.main-nav .experience{display:inline-flex;padding:5px 7px;font-size:9px;gap:4px;white-space:nowrap}
+  .header-actions{grid-column:1/-1;grid-row:2;width:100%;min-width:0;display:flex;justify-content:flex-end;align-items:center;flex-wrap:nowrap;gap:5px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+  .header-actions::-webkit-scrollbar{display:none}.header-actions #roleLabel{font-size:10px}.header-actions #editorLoginBtn{min-height:28px!important;padding:4px 8px!important;font-size:10px!important}
+  #editorTools{flex:0 0 auto;flex-wrap:nowrap;gap:4px}.header-actions #editorTools button,.header-actions .upload-map{min-height:27px!important;padding:4px 7px!important;font-size:10px!important}
+  #appShell{position:relative;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+  #villageSidebar{display:none!important}
+  body.show-spot-drawer #villageSidebar{display:flex!important;position:absolute;z-index:60;left:9px;top:9px;width:min(86vw,320px);height:min(58dvh,520px);max-height:calc(100% - 18px);min-height:0;padding:14px 13px 10px;border:1px solid #e4e9de;border-radius:15px;background:#fbfcf7;box-shadow:0 12px 35px #18362630}
+  body.show-spot-drawer .side-intro{display:block}.side-intro h2{font-size:20px;margin-top:5px}.side-intro .eyebrow{margin-bottom:7px;font-size:9px}.side-intro p{margin:6px 0 9px;font-size:10px;line-height:1.5}
+  body.show-spot-drawer .side-stats{padding:5px 0;margin:0 0 8px}.side-stats strong{font-size:18px}.side-stats span{font-size:9px}
+  body.show-spot-drawer .spot-list{overflow:auto;min-height:40px;flex-direction:column;gap:3px}.spot-row{grid-template-columns:34px minmax(0,1fr) 14px;gap:7px;padding:5px;min-height:43px}.spot-icon{width:31px;height:31px;font-size:15px}.spot-copy strong{font-size:11px}.spot-copy small{font-size:9px;margin-top:2px}.side-footer{display:none}
+  #mapWrap{order:initial;flex:1 1 auto;width:100%;height:0;min-height:0}
+  .spot-list-toggle{display:block;position:absolute;z-index:8;right:11px;top:12px;border:1px solid #e5e9df;border-radius:9px;background:#fff;color:#4c6251;padding:9px 12px;font-size:12px;box-shadow:0 3px 12px #1e392018}
+  .map-meta{left:10px;top:12px;padding:6px 8px;max-width:calc(100% - 142px);font-size:11px}.map-meta strong{white-space:nowrap}.map-copy{left:12px;top:24%;gap:8px}.map-copy strong{font-size:clamp(19px,5.8vw,26px);line-height:1.5}.map-copy span{font-size:10px}.map-copy b{font-size:19px}
+  .marker{width:max-content;min-width:0;max-width:min(48vw,190px);height:34px;margin:-17px 0 0 -50%;padding:0 10px;border:1px solid #e2e7da;border-radius:8px;background:#fffdf2;color:#405844;font-family:inherit;font-size:12px;font-weight:650;white-space:nowrap;box-shadow:0 3px 12px #182b1d25;animation:none;overflow:hidden}
+  .marker .marker-index{display:none}.marker .marker-label{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis}.marker.voted{background:#e4edd9;color:#315b42;border-color:#bacbaa}
+  .marker:active{transform:scale(.97)}
+  .compass{display:none}.map-bottom-note{left:9px;bottom:max(10px,env(safe-area-inset-bottom));font-size:10px;padding:7px 9px}
+  .zoom-controls{right:11px;bottom:max(10px,env(safe-area-inset-bottom));display:flex;flex-direction:column;padding:6px;border-radius:11px}.zoom-controls button{width:42px;height:44px;font-size:21px}.zoom-controls #zoomPercent{min-width:42px;padding:7px 0;font-size:10px}.zoom-controls button.reset-btn{width:42px;height:40px;border-left:0;border-top:1px solid #edf0e9;border-radius:0 0 6px 6px}
+}
+@media(max-width:380px){.brand h1{font-size:14px}.brand-mark{width:32px;height:32px}.main-nav{gap:1px}.nav-guide{font-size:10px}.main-nav .experience{font-size:8px;padding:4px 5px}.header-actions #roleLabel{font-size:9px}.header-actions #editorLoginBtn{font-size:9px!important;padding:4px 6px!important}.spot-list-toggle{right:8px;padding:8px 9px}}
+
+
+/* Inspired by README point system: fixed yellow anchors, collision-avoiding labels */
+.marker {
+  width: 13px !important; height: 13px !important; min-width: 13px !important;
+  margin: -6.5px 0 0 -6.5px !important; padding: 0 !important;
+  border: 2px solid #fff !important; border-radius: 50% !important;
+  background: #e8c43d !important; color: transparent !important;
+  box-shadow: 0 0 0 1px #c7a92e, 0 1px 5px #17251a66 !important;
+  animation: none !important; z-index: 4 !important;
+}
+.marker.voted { background: #e8c43d !important; border-color: #fff !important; }
+.marker .marker-index, .marker .marker-label { display: none !important; }
+.marker:hover { transform: scale(1.2) !important; }
+.point-name-layer { position:absolute; inset:0; z-index:6; overflow:hidden; pointer-events:none; user-select:none; }
+.point-name-lines { position:absolute; inset:0; width:100%; height:100%; fill:none; stroke:#344d32; stroke-width:4; stroke-linecap:round; stroke-linejoin:round; opacity:1; filter:drop-shadow(0 0 1.5px rgba(255,255,245,.98)); }
+.point-name-label { position:absolute; left:0; top:0; display:inline-flex; align-items:center; gap:5px; width:max-content; max-width:330px; min-height:44px; padding:7px 12px; border:1px solid #99a889; border-radius:5px; background:rgba(255,255,250,.99); color:#263f2f; box-shadow:0 2px 9px #17251a30; font-family:inherit; font-size:20px; font-weight:700; line-height:26px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; will-change:transform; }
+.point-name-label.active { border-color:#8da56c; background:#f3f8e9; color:#25452e; }
+.point-name-count { font-size:14px; line-height:20px; padding:0 7px; border-radius:3px; background:#eef2de; color:#84905c; }
+.point-name-label.hidden { display:none; }
+@media(max-width:700px) { .point-name-label { max-width:330px; min-height:44px; padding:7px 12px; font-size:20px; font-weight:700; line-height:26px; } }
+.header-actions #recordsLink{display:inline-flex;align-items:center;text-decoration:none;border-radius:8px;background:#edf1e8;color:#355642;padding:9px 12px;font-size:13px;white-space:nowrap}
+.point-name-label { pointer-events:auto; cursor:pointer; }
+.point-name-label:hover,.point-name-label:focus-visible { outline:3px solid #d8bb4c; outline-offset:2px; }
+.point-name-picker { position:absolute; z-index:30; display:grid; gap:5px; min-width:190px; max-width:320px; padding:7px; border:1px solid #99a889; border-radius:8px; background:#fffef9; box-shadow:0 5px 18px #17251a40; pointer-events:auto; }
+.point-name-picker button { width:100%; text-align:left; padding:7px 10px; border-radius:5px; background:#f4f6ec; color:#263f2f; font-size:14px; white-space:normal; }
+.image-expand-btn { position:absolute; top:8px; right:8px; z-index:8; width:40px; height:40px; display:grid; place-items:center; padding:0; border:1px solid rgba(255,255,255,.9); border-radius:50%; background:rgba(34,55,40,.82); color:#fff; font-size:23px; line-height:1; box-shadow:0 2px 8px rgba(0,0,0,.25); }
+.image-expand-btn:hover { background:#244b35; transform:scale(1.06); }
+.image-preview { position:fixed; inset:0; z-index:2000; display:flex; align-items:center; justify-content:center; padding:5vh 3vw; background:rgba(13,18,14,.92); }
+.image-preview.hidden { display:none; }
+.image-preview img { display:block; max-width:94vw; max-height:90vh; width:auto; height:auto; object-fit:contain; border-radius:6px; box-shadow:0 8px 32px rgba(0,0,0,.35); }
+.image-preview #closeImagePreview { position:absolute; top:max(12px,env(safe-area-inset-top)); right:max(12px,env(safe-area-inset-right)); width:48px; height:48px; padding:0; border:0; border-radius:50%; background:rgba(255,255,255,.18); color:#fff; font-size:34px; line-height:1; }
+
+  .preview-nav { position:absolute; z-index:2; top:50%; transform:translateY(-50%); width:54px; height:64px; padding:0; border:1px solid rgba(255,255,255,.3); border-radius:14px; background:rgba(255,255,255,.16); color:#fff; font-size:48px; line-height:1; }
+  .preview-nav:hover { background:rgba(255,255,255,.28); }
+  .preview-prev { left:max(18px,env(safe-area-inset-left)); }
+  .preview-next { right:max(18px,env(safe-area-inset-right)); }
+  .image-preview-caption { position:absolute; bottom:max(18px,env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); max-width:85vw; padding:10px 16px; border-radius:999px; background:rgba(255,255,255,.16); color:#fff; font-size:16px; text-align:center; }
+  @media (max-width:700px) { .preview-nav { width:44px; height:52px; font-size:40px; } .preview-prev { left:8px; } .preview-next { right:8px; } .image-preview-caption { font-size:14px; bottom:max(14px,env(safe-area-inset-bottom)); } }
+
+
+/* 手机投票面板按内容自适应高度，避免内容较少时出现空白 */
+@media (max-width:700px) and (orientation:portrait) {
+  #panel {
+    height:auto;
+    min-height:0;
+    max-height:90vh;
+    max-height:90dvh;
+    padding-top:52px;
+    padding-bottom:max(14px,env(safe-area-inset-bottom));
+  }
+  #panelTitle { margin-bottom:12px !important; }
+  .flex-row { margin-top:8px; margin-bottom:12px; gap:7px; }
+  .work-card,.voice-card { padding:7px; }
+  .work-img { width:100%; aspect-ratio:1/1; }
+  .action-area { margin-top:10px; }
+}
+@media (max-width:380px) and (orientation:portrait) {
+  #panel { min-height:0; padding-left:8px; padding-right:8px; }
+  .flex-row { gap:5px; }
+  .work-card,.voice-card { padding:5px; }
+}
+
+
+/* 手机触控地图：让手指拖动优先交给地图画布 */
+@media (max-width:700px) { #mapWrap { touch-action:none; overscroll-behavior:contain; -webkit-user-select:none; user-select:none; } #mapImg { -webkit-user-drag:none; touch-action:none; } }
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true">✳</span>
+    <div><h1>花木共创</h1><small>HUAMU · TOGETHER</small></div>
+  </div>
+  <nav class="main-nav"><a class="active" href="#mapWrap">⌖&nbsp; 共创地图</a><button id="guideBtn" class="nav-guide" type="button">参与指南&nbsp; →</button><span class="experience"><i></i>云端共创版</span></nav>
+  <div class="header-actions"><span id="roleLabel">村民体验</span><button id="visitLoginBtn" class="ghost">走访登录</button><button id="editorLoginBtn" class="ghost">编辑者登录</button>
+    <div id="editorTools" class="hidden">
+      <label class="ghost upload-map">上传地图<input id="fileInput" type="file" accept="image/*" class="hidden"></label>
+      <button id="addModeBtn" class="ghost">添加点位</button><a id="recordsLink" class="ghost" href="./admin.html" target="_blank" rel="noopener">投票记录</a>
+      <button id="clearBtn" class="danger">清空</button>
+      <button id="editorLogoutBtn" class="ghost">退出编辑</button>
+    </div>
+  </div>
+</header>
+
+<main id="appShell">
+  <aside id="villageSidebar">
+    <div class="side-intro">
+      <div class="eyebrow">一村一地图 · 一起向未来</div>
+      <h2>村庄的下一步，<br>听见你的声音<span>。</span></h2>
+      <p>发现身边的公共空间，<br>把你的好想法，种在花木村。</p>
+    </div>
+    <div class="side-stats">
+      <div><strong id="pointCount">0</strong><span>共创点位</span></div>
+      <div><strong id="groupCount">0</strong><span>作品方案</span></div>
+      <div><strong id="myVoteCount">0</strong><span>我的参与</span></div>
+    </div>
+    <div class="point-list-heading"><strong>按点位探索</strong><span id="listPointCount">0</span><small>点击参与</small></div>
+    <div id="spotList" class="spot-list"><div class="list-empty">地图点位加载中…</div></div>
+    <div class="side-footer"><span>✳</span><p>每一个小想法，<br>都能让村庄更好一点。</p></div>
+  </aside>
+
+  <section id="mapWrap" aria-label="花木村共创地图">
+    <div class="map-meta"><span class="live-dot"></span><strong>花木村共创地图</strong><small>V.03</small><span class="map-hint">放大查看详细点位</span></div>
+    <button id="spotListToggle" class="spot-list-toggle" type="button" aria-expanded="false">☷&nbsp; 点位列表</button>
+    <div class="map-copy"><strong>一花一木，<br>一起共创。</strong><span>单指滑动地图 · 双指缩放<br>点击点位参与共创</span><b>↘</b></div>
+    <div class="compass" aria-hidden="true"><small>N</small><span>✥</span><small>S</small></div>
+    <div id="emptyTip">正在连接花木村地图…</div>
+    <div id="mapContainer"><img id="mapImg" class="hidden" alt="花木村地图"><div id="pointNameLayer" class="point-name-layer" role="region" aria-label="点击点位名称可打开投票"><svg class="point-name-lines"></svg></div></div>
+    <div class="map-bottom-note"><span class="live-dot"></span> 黄色点位 · 放大显示名称 <i></i> <span id="mapFootCount">0 个点位</span></div>
+    <div class="zoom-controls"><button id="zoomInBtn" aria-label="放大">＋</button><span id="zoomPercent">100%</span><button id="zoomOutBtn" aria-label="缩小">－</button><button id="resetBtn" class="reset-btn" aria-label="复原">□</button></div>
+  </section>
+</main>
+
+<div id="panelMask">
+  <div id="panel">
+    <button id="closePanel" class="ghost" aria-label="返回">←</button>
+    <h2 id="panelTitle" style="margin-top:0; color: var(--text-main);">点位标题</h2>
+    <div id="spotEditorActions" class="hidden"><input id="renameSpotInput" type="text" maxlength="40" placeholder="输入新的点位名称"><button id="renameSpotBtn" class="ghost" type="button">保存名称</button><button id="deleteSpotBtn" class="danger" type="button">删除此点位</button><span>关联作品、投票和意见也会一起删除</span></div>
+    
+    <div class="flex-row" id="mainGrid"></div>
+    
+    <div class="action-area">
+      <button id="submitBtn">确认提交</button>
+      <div class="voted-msg" id="votedMsg">✓ 已在此点位完成投票</div>
+    </div>
+  </div>
+</div>
+
+<div id="imagePreview" class="image-preview hidden" role="dialog" aria-modal="true" aria-label="作品大图预览">
+  <button id="closeImagePreview" type="button" aria-label="关闭大图">×</button>
+  <button id="prevPreviewImage" class="preview-nav preview-prev" type="button" aria-label="上一个方案">‹</button>
+  <img id="imagePreviewImg" alt="作品大图">
+  <button id="nextPreviewImage" class="preview-nav preview-next" type="button" aria-label="下一个方案">›</button>
+  <div id="imagePreviewCaption" class="image-preview-caption" aria-live="polite"></div>
+</div>
+<script>
+/* 云端配置统一从 config.js 读取；config.example.js 是可入库的模板。 */
+const CONFIG = window.HUAMU_CONFIG || {};
+const CLOUD_ENV_ID = CONFIG.envId;
+const CLOUD_PUBLISHABLE_KEY = CONFIG.publishableKey;
+const CLOUD_REGION = CONFIG.region || 'ap-shanghai';
+const VILLAGE_ID = CONFIG.villageId || 'demo-village';
+const IMAGE_BUCKET_ID = CONFIG.buckets?.images || 'demo-images';
+const VOICE_BUCKET_ID = CONFIG.buckets?.voice || 'demo-voice';
+function assertConfig() {
+  if (!CLOUD_ENV_ID || !CLOUD_PUBLISHABLE_KEY ||
+      /^YOUR_/i.test(CLOUD_ENV_ID) || /^YOUR_/i.test(CLOUD_PUBLISHABLE_KEY)) {
+    throw new Error('尚未配置云端参数：请复制 config.example.js 为 config.js，并填写你的 CloudBase 环境 ID 与 Publishable Key。');
+  }
+}
+let cloudApp = null;
+let cloudAuth = null;
+let cloudDb = null;
+let imageBucket = null;
+let voiceBucket = null;
+let cloudSdkError = null;
+function ensureCloudClients() {
+  assertConfig();
+  if (cloudSdkError) throw cloudSdkError;
+  if (cloudApp) return;
+  if (!window.cloudbase?.init) throw new Error('CloudBase SDK 未加载，请检查网络或静态托管是否允许访问 SDK。');
+  cloudApp = window.cloudbase.init({ env: CLOUD_ENV_ID, accessKey: CLOUD_PUBLISHABLE_KEY, region: CLOUD_REGION });
+  cloudAuth = cloudApp.auth;
+  if (!cloudAuth?.getSession || !cloudAuth?.signInAnonymously) throw new Error('登录模块未加载，请刷新网页后重试。');
+  if (typeof cloudApp.rdb !== 'function') throw new Error('当前网页加载的 CloudBase SDK 不包含 PostgreSQL 功能。');
+  if (!cloudApp.storage?.from) throw new Error('当前网页加载的 CloudBase SDK 不包含云存储功能。');
+  cloudDb = cloudApp.rdb();
+  imageBucket = cloudApp.storage.from(IMAGE_BUCKET_ID);
+  voiceBucket = cloudApp.storage.from(VOICE_BUCKET_ID);
+}let cloudReady = false;
+let cloudUserId = null;
+let cloudInitPromise = null;
+let voteRows = [];
+let villageRow = null;
+async function ensureCloudSession(forceAnonymous = false) {
+  ensureCloudClients();
+  if (forceAnonymous) cloudInitPromise = null;
+  if (!cloudInitPromise) cloudInitPromise = (async () => {
+    const { data: sessionData, error: sessionError } = await cloudAuth.getSession();
+    if (sessionError) throw sessionError;
+    let session = sessionData?.session;
+    if (forceAnonymous && session?.user && !session.user.is_anonymous) {
+      await cloudAuth.signOut();
+      session = null;
+    }
+    if (!session) {
+      const { data, error } = await cloudAuth.signInAnonymously();
+      if (error) throw error;
+      session = data?.session;
+    }
+    cloudUserId = session?.user?.id || null;
+    if (!cloudUserId) throw new Error('匿名登录没有返回用户编号');
+    return session;
+  })();
+  return cloudInitPromise;
+}
+function cloudError(error, fallback) {
+  console.error(fallback, error);
+  return new Error(error?.message || fallback);
+}
+async function loadCloudData() {
+  await ensureCloudSession();
+  const [villageResult, spotsResult, votesResult] = await Promise.all([
+    cloudDb.from('villages').select('id,name,map_image_url,visit_passcode').eq('id', VILLAGE_ID).single(),
+    cloudDb.from('spots').select('id,name,x,y,is_open,sort_order').eq('village_id', VILLAGE_ID).eq('is_open', true).order('sort_order'),
+    cloudDb.from('votes').select('spot_id,work_id').eq('voter_uid', cloudUserId)
+  ]);
+  if (villageResult.error) throw cloudError(villageResult.error, '读取村庄信息失败');
+  if (spotsResult.error) throw cloudError(spotsResult.error, '读取点位失败');
+  if (votesResult.error) throw cloudError(votesResult.error, '读取投票状态失败');
+  villageRow = villageResult.data;
+  voteRows = votesResult.data || [];
+  const spots = spotsResult.data || [];
+  if (spots.length) {
+    const ids = spots.map(s => s.id);
+    const worksResult = await cloudDb.from('works').select('id,spot_id,title,image_url,description,sort_order').in('spot_id', ids).order('sort_order');
+    if (worksResult.error) throw cloudError(worksResult.error, '读取作品失败');
+    const worksBySpot = new Map();
+    (worksResult.data || []).forEach(work => {
+      if (!worksBySpot.has(work.spot_id)) worksBySpot.set(work.spot_id, []);
+      worksBySpot.get(work.spot_id).push(work);
+    });
+    state.spots = spots.map(s => {
+      const ownVote = voteRows.find(v => v.spot_id === s.id);
+      return { ...s, hasVoted: !!ownVote, votedWorkId: ownVote?.work_id || null, works: worksBySpot.get(s.id) || [] };
+    });
+  } else state.spots = [];
+  state.image = villageRow?.map_image_url || null;
+  cacheCloudState();
+  if (state.image) loadImageAndRender(state.image); else loadImageAndRender(null);
+  renderMarkers();
+}
+async function uploadCloudFile(bucket, path, file, contentType) {
+  const { data, error } = await bucket.upload(path, file, { contentType, upsert: true });
+  if (error) throw cloudError(error, '文件上传失败');
+  return data;
+}
+function publicImageUrl(path) {
+  const { data, error } = imageBucket.getPublicUrl(path);
+  if (error) throw cloudError(error, '生成图片地址失败');
+  return data.publicUrl;
+}
+const STORE_KEY = 'village_vote_session_cache';
+let state = loadState();
+let addMode = false;
+let isEditor = sessionStorage.getItem('village_editor_mode') === 'true';
+let isVisitor = sessionStorage.getItem('village_visitor_mode') === 'true';
+let currentSpotId = null;
+let selectedWorkId = null;
+let currentVoiceData = null;
+let isRecording = false;
+let mediaRecorder = null;
+
+/* ---------- 缩放与拖拽变量 ---------- */
+let scale = 1;
+let fitScale = 1;
+let minScale = 1; 
+let pointX = 0;
+let pointY = 0;
+let startX = 0, startY = 0;
+let isDragging = false;
+let moved = false; 
+let currentImgW = 0, currentImgH = 0;
+
+function loadState() {
+  return { image: null, spots: [] };
+}
+function saveState() {}
+function cacheCloudState() { try { sessionStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch {} }
+
+const mapWrap = document.getElementById('mapWrap');
+const mapContainer = document.getElementById('mapContainer');
+const mapImg = document.getElementById('mapImg');
+const emptyTip = document.getElementById('emptyTip');
+let cloudStatusTimer = null;
+function setCloudStatus(message) {
+  emptyTip.textContent = message;
+  emptyTip.classList.remove('hidden');
+  if (cloudStatusTimer) clearTimeout(cloudStatusTimer);
+}
+
+function updateRoleUI() {
+  document.getElementById('editorTools').classList.toggle('hidden', !isEditor);
+  document.getElementById('editorLoginBtn').classList.remove('hidden');
+  document.getElementById('editorLoginBtn').textContent = isEditor ? '退出编辑者' : '编辑者登录';
+  document.getElementById('roleLabel').textContent = isEditor ? '编辑者模式' : (isVisitor ? '走访人员 · 无限投票' : '村民体验');
+  const visitBtn = document.getElementById('visitLoginBtn');
+  if (visitBtn) visitBtn.textContent = isVisitor ? '退出走访' : '走访登录';
+}
+
+
+/* Non-overlapping screen-space point name labels; marker coordinates remain unchanged. */
+const pointNameLayer = document.getElementById('pointNameLayer');
+const pointNameSvg = pointNameLayer.querySelector('svg');
+let pointNameFrame = 0;
+function placePointNames(items, bounds, obstacles) {
+  const placed = [];
+  const overlaps = (a,b,g=5) => a.x < b.x+b.w+g && a.x+a.w+g > b.x && a.y < b.y+b.h+g && a.y+a.h+g > b.y;
+  const ordered = [...items].sort((a,b) => a.y-b.y || a.x-b.x);
+  for (const item of ordered) {
+    const valid = box => box.x >= bounds.x && box.y >= bounds.y && box.x+box.w <= bounds.x+bounds.w && box.y+box.h <= bounds.y+bounds.h && !obstacles.some(o=>overlaps(box,o,3)) && !placed.some(o=>overlaps(box,o,5));
+    let best = null, bestCost = Infinity;
+    const step = item.h + 5;
+    for (let row=0; row<=9; row++) {
+      const ys = row ? [item.y-item.h/2+row*step,item.y-item.h/2-row*step] : [item.y-item.h/2];
+      for (const y of ys) for (const x of [item.x+13,item.x-item.w-13,item.x-item.w/2]) {
+        const box={id:item.id,x,y,w:item.w,h:item.h,anchorX:item.x,anchorY:item.y};
+        if (!valid(box)) continue;
+        const dx=Math.max(box.x-item.x,0,item.x-(box.x+box.w));
+        const dy=Math.max(box.y-item.y,0,item.y-(box.y+box.h));
+        const cost=dx*dx+dy*dy+Math.min(dx,dy)*8;
+        if(cost<bestCost){best=box;bestCost=cost;}
+      }
+    }
+    if(best) placed.push(best);
+  }
+  return placed;
+}
+function schedulePointNameLayout() {
+  if (!pointNameLayer || pointNameFrame) return;
+  pointNameFrame = requestAnimationFrame(() => { pointNameFrame=0; layoutPointNames(); });
+}
+function renderPointNameLabels() {
+  pointNameSvg.replaceChildren();
+  pointNameLayer.querySelectorAll('.point-name-label').forEach(el=>el.remove());
+  const grouped = new Map();
+  const labels = [];
+  for (const spot of state.spots) {
+    const groupName = /林木园/.test(spot.name || '') ? '林木园' : /百果园/.test(spot.name || '') ? '百果园' : null;
+    if (!groupName) { labels.push({ id:String(spot.id), name:spot.name || '地图点位', x:Number(spot.x), y:Number(spot.y), spotIds:[String(spot.id)] }); continue; }
+    if (!grouped.has(groupName)) grouped.set(groupName, []);
+    grouped.get(groupName).push(spot);
+  }
+  for (const [name, spots] of grouped) {
+    labels.push({ id:'area-'+name, name, count:spots.length, x:spots.reduce((sum,p)=>sum+Number(p.x),0)/spots.length, y:spots.reduce((sum,p)=>sum+Number(p.y),0)/spots.length, spotIds:spots.map(p=>String(p.id)) });
+  }
+  for (const item of labels) {
+    const label=document.createElement('span'); label.className='point-name-label'; label.dataset.labelId=item.id; label.dataset.x=String(item.x); label.dataset.y=String(item.y); label.dataset.spotIds=JSON.stringify(item.spotIds); label.setAttribute('role','button'); label.tabIndex=0; label.setAttribute('aria-label',item.count ? item.name+'，'+item.count+'处，点击选择点位投票' : '打开'+item.name+'投票');
+    const name=document.createElement('span'); name.textContent=item.name; label.append(name);
+    if(item.count){const count=document.createElement('span');count.className='point-name-count';count.textContent=item.count+'处';label.append(count);}
+    const activate=event=>{
+      event.preventDefault(); event.stopPropagation();
+      const ids=JSON.parse(label.dataset.spotIds||'[]');
+      if(ids.length===1){closePointNamePicker();openPanel(ids[0]);}
+      else showPointNamePicker(ids,label);
+    };
+    label.addEventListener('click',activate);
+    label.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){activate(event);}});
+    pointNameLayer.appendChild(label);
+  }
+  schedulePointNameLayout();
+}
+function closePointNamePicker(){pointNameLayer.querySelector('.point-name-picker')?.remove();}
+function showPointNamePicker(ids,label){
+  closePointNamePicker();
+  const picker=document.createElement('div'); picker.className='point-name-picker'; picker.setAttribute('role','menu');
+  const x=Number(label.dataset.placedX)||0, y=Number(label.dataset.placedY)||0;
+  picker.style.transform=`translate3d(${Math.max(8,Math.min(x,mapImg.naturalWidth-330))}px,${y+label.offsetHeight+8}px,0)`;
+  for(const id of ids){
+    const spot=state.spots.find(item=>String(item.id)===String(id)); if(!spot)continue;
+    const option=document.createElement('button'); option.type='button'; option.textContent=spot.name||'打开点位'; option.setAttribute('role','menuitem');
+    option.addEventListener('click',event=>{event.stopPropagation();closePointNamePicker();openPanel(spot.id);});
+    picker.appendChild(option);
+  }
+  pointNameLayer.appendChild(picker);
+}
+document.addEventListener('click',event=>{
+  if(!event.target.closest('.point-name-picker')&&!event.target.closest('.point-name-label'))closePointNamePicker();
+});
+function layoutPointNames() {
+  const labels=[...pointNameLayer.querySelectorAll('.point-name-label')];
+  const width=mapImg.naturalWidth, height=mapImg.naturalHeight;
+  if (!state.image || !width || !height || scale/(fitScale||1) < 1.9) { labels.forEach(el=>el.hidden=true); pointNameSvg.replaceChildren(); return; }
+  pointNameLayer.style.width=width+'px'; pointNameLayer.style.height=height+'px';
+  pointNameSvg.setAttribute('viewBox',`0 0 ${width} ${height}`);
+  pointNameSvg.setAttribute('width',width); pointNameSvg.setAttribute('height',height);
+  const bounds={x:10,y:10,w:Math.max(0,width-20),h:Math.max(0,height-20)};
+  const image=mapImg.getBoundingClientRect(), wrap=mapWrap.getBoundingClientRect();
+  const actualScale=image.width/width || scale;
+  const hud=[...mapWrap.querySelectorAll('.map-meta,.map-copy,.compass,.map-bottom-note,.zoom-controls,.spot-list-toggle')].map(el=>{
+    const r=el.getBoundingClientRect();
+    return {x:(r.left-image.left)/actualScale,y:(r.top-image.top)/actualScale,w:r.width/actualScale,h:r.height/actualScale};
+  }).filter(r=>r.w>0&&r.h>0&&r.x<width&&r.y<height&&r.x+r.w>0&&r.y+r.h>0);
+  const items=[];
+  for(const label of labels){
+    label.hidden=false;
+    const rect=label.getBoundingClientRect();
+    const x=Number(label.dataset.x)*width/100, y=Number(label.dataset.y)*height/100;
+    if(x<0||x>width||y<0||y>height){label.hidden=true;continue;}
+    items.push({id:String(label.dataset.labelId),x,y,w:Math.min(rect.width/actualScale,330),h:rect.height/actualScale,label});
+  }
+  const pins=state.spots.map(spot=>({x:Number(spot.x)*width/100-12,y:Number(spot.y)*height/100-12,w:24,h:24}));
+  const placed=placePointNames(items,bounds,[...hud,...pins]);
+  const byId=new Map(placed.map(p=>[p.id,p]));
+  const paths=[]; const ns='http://www.w3.org/2000/svg';
+  for(const item of items){
+    const box=byId.get(item.id); item.label.hidden=!box; if(!box)continue;
+    item.label.dataset.placedX=String(Math.round(box.x)); item.label.dataset.placedY=String(Math.round(box.y));
+    item.label.style.transform=`translate3d(${Math.round(box.x)}px,${Math.round(box.y)}px,0)`;
+    const ex=Math.max(box.x,Math.min(item.x,box.x+box.w)), ey=Math.max(box.y,Math.min(item.y,box.y+box.h));
+    const path=document.createElementNS(ns,'path'); path.setAttribute('d',`M${item.x},${item.y} L${ex},${ey}`); paths.push(path);
+  }
+  pointNameSvg.replaceChildren(...paths);
+}
+function updateTransform() {
+  mapContainer.style.transform = `translate(${pointX}px, ${pointY}px) scale(${scale})`;
+  const zoomLabel = document.getElementById('zoomPercent');
+  if (zoomLabel) zoomLabel.textContent = `${Math.round(scale / (fitScale || 1) * 100)}%`;
+  schedulePointNameLayout();
+}
+
+/* ---------- 核心：自动完整显示逻辑（允许缩小和放大） ---------- */
+function fitToScreen(w, h) {
+  currentImgW = w || mapImg.naturalWidth;
+  currentImgH = h || mapImg.naturalHeight;
+  if (!currentImgW) return;
+
+  const wrapW = mapWrap.clientWidth;
+  const wrapH = mapWrap.clientHeight;
+
+  // contain 比例：把图片完整放进屏幕
+  const scaleContain = Math.min(wrapW / currentImgW, wrapH / currentImgH);
+  fitScale = scaleContain;
+  
+  // 最小比例允许比完整显示再小一点
+  minScale = scaleContain * 0.5; 
+  
+  // 初始打开直接看完整全图
+  scale = scaleContain; 
+  
+  // 居中显示
+  pointX = (wrapW - currentImgW * scale) / 2;
+  pointY = (wrapH - currentImgH * scale) / 2;
+  
+  updateTransform();
+}
+
+window.addEventListener('resize', () => {
+  if (state.image) fitToScreen();
+});
+
+/* ---------- 图片加载与渲染 ---------- */
+function loadImageAndRender(imgSrc) {
+  if (!imgSrc) {
+    mapImg.classList.add('hidden');
+    emptyTip.textContent = '村庄地图即将开放';
+    emptyTip.classList.remove('hidden');
+    document.querySelectorAll('.marker').forEach(el => el.remove());
+    renderSidebar();
+    return;
+  }
+
+  const tempImg = new Image();
+  tempImg.onload = () => {
+    mapImg.src = imgSrc;
+    mapImg.classList.remove('hidden');
+    emptyTip.classList.add('hidden');
+    renderMarkers();
+    fitToScreen(tempImg.naturalWidth, tempImg.naturalHeight);
+  };
+  tempImg.src = imgSrc;
+}
+
+function renderMarkers() {
+  document.querySelectorAll('.marker').forEach(el => el.remove());
+  state.spots.forEach((spot, i) => {
+    const el = document.createElement('div');
+    el.className = 'marker' + (spot.hasVoted ? ' voted' : '');
+    const indexLabel = document.createElement('span'); indexLabel.className = 'marker-index'; indexLabel.textContent = String(i + 1).padStart(2, '0');
+    const nameLabel = document.createElement('span'); nameLabel.className = 'marker-label'; nameLabel.textContent = spot.name || `点位${i + 1}`;
+    el.append(indexLabel, nameLabel);
+    el.title = spot.name || `点位${i + 1}`;
+    el.style.left = spot.x + '%';
+    el.style.top = spot.y + '%';
+    el.onclick = (e) => { 
+      e.stopPropagation(); 
+      if (!addMode && !moved) openPanel(spot.id); 
+    };
+    mapContainer.appendChild(el);
+  });
+  renderSidebar();
+  renderPointNameLabels();
+}
+
+/* ---------- 缩放事件处理 ---------- */
+document.getElementById('resetBtn').onclick = () => { fitToScreen(); };
+
+document.getElementById('zoomInBtn').onclick = () => {
+  // 以屏幕中心为基准放大
+  const wrapW = mapWrap.clientWidth;
+  const wrapH = mapWrap.clientHeight;
+  const ratio = 1.2;
+  const newScale = Math.min(scale * ratio, minScale * 10); // 最大放大幅度提高
+  applyZoomCenter(wrapW / 2, wrapH / 2, newScale);
+};
+
+document.getElementById('zoomOutBtn').onclick = () => {
+  const wrapW = mapWrap.clientWidth;
+  const wrapH = mapWrap.clientHeight;
+  const ratio = 0.8;
+  const newScale = Math.max(scale * ratio, minScale);
+  applyZoomCenter(wrapW / 2, wrapH / 2, newScale);
+};
+
+// 辅助函数：以某点 (cx, cy) 为中心进行缩放
+function applyZoomCenter(cx, cy, newScale) {
+  const ratio = newScale / scale;
+  pointX = cx - (cx - pointX) * ratio;
+  pointY = cy - (cy - pointY) * ratio;
+  scale = newScale;
+  updateTransform();
+}
+
+// 鼠标滚轮缩放 (以鼠标位置为中心)
+mapWrap.addEventListener('wheel', (e) => {
+  if (!state.image) return;
+  e.preventDefault();
+  
+  const rect = mapWrap.getBoundingClientRect();
+  const cx = e.clientX - rect.left;
+  const cy = e.clientY - rect.top;
+  
+  const delta = e.deltaY > 0 ? -0.1 : 0.1;
+  const newScale = Math.min(Math.max(minScale, scale + delta), minScale * 10); // 最大放大到 10 倍
+  
+  applyZoomCenter(cx, cy, newScale);
+}, { passive: false });
+
+
+/* ---------- 统一触控与鼠标手势：单指/鼠标拖动，双指缩放 ---------- */
+if (window.PointerEvent) {
+  const activeMapPointers = new Map();
+  let pinchStartDistance = 0;
+  let pinchStartScale = 1;
+  let previousPinchCenter = null;
+  const isMapControl = target => !!target.closest('button,a,input,textarea,select,.marker,.point-name-label');
+
+  function rebaseSinglePointer() {
+    const remaining = [...activeMapPointers.values()][0];
+    if (!remaining) { isDragging = false; return; }
+    isDragging = true;
+    startX = remaining.x - pointX;
+    startY = remaining.y - pointY;
+  }
+
+  mapWrap.addEventListener('pointerdown', event => {
+    if (!state.image || isMapControl(event.target)) return;
+    moved = false;
+    activeMapPointers.set(event.pointerId, { x:event.clientX, y:event.clientY });
+    try { mapWrap.setPointerCapture(event.pointerId); } catch {}
+    if (activeMapPointers.size === 1) {
+      isDragging = true;
+      startX = event.clientX - pointX;
+      startY = event.clientY - pointY;
+    } else if (activeMapPointers.size === 2) {
+      const [p1,p2] = [...activeMapPointers.values()];
+      pinchStartDistance = Math.hypot(p1.x-p2.x,p1.y-p2.y) || 1;
+      pinchStartScale = scale;
+      previousPinchCenter = {x:(p1.x+p2.x)/2,y:(p1.y+p2.y)/2};
+      isDragging = false;
+    }
+  });
+
+  mapWrap.addEventListener('pointermove', event => {
+    if (!activeMapPointers.has(event.pointerId)) return;
+    const pointer = activeMapPointers.get(event.pointerId);
+    pointer.x = event.clientX; pointer.y = event.clientY;
+    if (activeMapPointers.size >= 2) {
+      const [p1,p2] = [...activeMapPointers.values()];
+      const distance = Math.hypot(p1.x-p2.x,p1.y-p2.y) || 1;
+      const centerX = (p1.x+p2.x)/2, centerY = (p1.y+p2.y)/2;
+      const rect = mapWrap.getBoundingClientRect();
+      const cx = centerX-rect.left, cy = centerY-rect.top;
+      const newScale = Math.min(Math.max(minScale,pinchStartScale*(distance/pinchStartDistance)),minScale*10);
+      const ratio = newScale/scale;
+      pointX = cx-(cx-pointX)*ratio;
+      pointY = cy-(cy-pointY)*ratio;
+      if (previousPinchCenter) {
+        pointX += centerX-previousPinchCenter.x;
+        pointY += centerY-previousPinchCenter.y;
+      }
+      scale = newScale;
+      previousPinchCenter = {x:centerX,y:centerY};
+      moved = true;
+      updateTransform();
+      if (event.cancelable) event.preventDefault();
+    } else if (isDragging) {
+      const nextX = event.clientX-startX, nextY = event.clientY-startY;
+      if (Math.abs(nextX-pointX)>4 || Math.abs(nextY-pointY)>4) moved = true;
+      pointX=nextX; pointY=nextY;
+      updateTransform();
+      if (event.cancelable) event.preventDefault();
+    }
+  }, {passive:false});
+
+  function finishMapPointer(event) {
+    if (!activeMapPointers.has(event.pointerId)) return;
+    activeMapPointers.delete(event.pointerId);
+    previousPinchCenter = null;
+    if (activeMapPointers.size === 1) rebaseSinglePointer();
+    else isDragging = false;
+  }
+  mapWrap.addEventListener('pointerup',finishMapPointer);
+  mapWrap.addEventListener('pointercancel',finishMapPointer);
+  mapWrap.addEventListener('lostpointercapture',finishMapPointer);
+} else {
+  /* 旧版手机浏览器兼容：触摸拖动与双指缩放 */
+  let initialDistance=0, initialScale=1, touchCenterX=0, touchCenterY=0;
+  mapWrap.addEventListener('touchstart',e=>{
+    moved=false;
+    if(e.touches.length===2){initialDistance=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY)||1;initialScale=scale;const rect=mapWrap.getBoundingClientRect();touchCenterX=(e.touches[0].clientX+e.touches[1].clientX)/2-rect.left;touchCenterY=(e.touches[0].clientY+e.touches[1].clientY)/2-rect.top;}
+    else if(e.touches.length===1){isDragging=true;startX=e.touches[0].clientX-pointX;startY=e.touches[0].clientY-pointY;}
+  },{passive:false});
+  mapWrap.addEventListener('touchmove',e=>{
+    if(!state.image)return;
+    if(e.touches.length===2){e.preventDefault();const distance=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY)||1;const nextScale=Math.min(Math.max(minScale,initialScale*(distance/initialDistance)),minScale*10);const ratio=nextScale/scale;pointX=touchCenterX-(touchCenterX-pointX)*ratio;pointY=touchCenterY-(touchCenterY-pointY)*ratio;scale=nextScale;moved=true;updateTransform();}
+    else if(e.touches.length===1&&isDragging){e.preventDefault();const nextX=e.touches[0].clientX-startX,nextY=e.touches[0].clientY-startY;if(Math.abs(nextX-pointX)>4||Math.abs(nextY-pointY)>4)moved=true;pointX=nextX;pointY=nextY;updateTransform();}
+  },{passive:false});
+  mapWrap.addEventListener('touchend',()=>{isDragging=false;});
+  mapWrap.addEventListener('mousedown',e=>{if(!state.image)return;isDragging=true;moved=false;startX=e.clientX-pointX;startY=e.clientY-pointY;});
+  window.addEventListener('mousemove',e=>{if(!isDragging)return;const nextX=e.clientX-startX,nextY=e.clientY-startY;if(Math.abs(nextX-pointX)>4||Math.abs(nextY-pointY)>4)moved=true;pointX=nextX;pointY=nextY;updateTransform();});
+  window.addEventListener('mouseup',()=>{isDragging=false;});
+}
+
+/* ---------- 加点位逻辑 ---------- */
+mapWrap.addEventListener('click', async (e) => {
+  if (!isEditor || !addMode || !state.image || moved) return;
+  const rect = mapImg.getBoundingClientRect();
+  if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) return;
+  const x = Number(((e.clientX - rect.left) / rect.width) * 100).toFixed(4);
+  const y = Number(((e.clientY - rect.top) / rect.height) * 100).toFixed(4);
+  try {
+    const order = Math.max(0, ...state.spots.map(s => Number(s.sort_order) || 0)) + 1;
+    const { data, error } = await cloudDb.from('spots').insert({ village_id: VILLAGE_ID, name: `点位${order}`, x, y, sort_order: order }).select('id,name,x,y,is_open,sort_order').single();
+    if (error) throw cloudError(error, '新增点位失败');
+    const spot = data;
+    const defaults = ['作品一','作品二','作品三'].map((title, idx) => ({ spot_id: spot.id, title, sort_order: idx + 1 }));
+    const worksResult = await cloudDb.from('works').insert(defaults).select('id,spot_id,title,image_url,description,sort_order');
+    if (worksResult.error) throw cloudError(worksResult.error, '点位已创建，但默认作品未创建，请刷新后重试');
+    spot.hasVoted = false; spot.works = worksResult.data || [];
+    state.spots.push(spot); cacheCloudState(); renderMarkers();
+  } catch (error) { alert(error.message || '新增点位失败'); }
+});
+/* ---------- 基础功能 ---------- */
+document.getElementById('fileInput').addEventListener('change', async (e) => {
+  const file = e.target.files?.[0]; if (!file) return;
+  if (!isEditor) { alert('请先登录编辑者账号'); return; }
+  if (!file.type.startsWith('image/')) { alert('请选择地图图片'); return; }
+  try {
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+    const path = 'maps/map-' + Date.now() + '.' + ext;
+    await uploadCloudFile(imageBucket, path, file, file.type);
+    const url = publicImageUrl(path);
+    const { error } = await cloudDb.from('villages').update({ map_image_url: url, updated_at: new Date().toISOString() }).eq('id', VILLAGE_ID);
+    if (error) throw cloudError(error, '地图已上传，但保存地图地址失败');
+    state.image = url; cacheCloudState(); loadImageAndRender(url); alert('地图已保存到云端');
+  } catch (error) { alert(error.message || '地图上传失败，请先在云端建好图片桶'); }
+  e.target.value = '';
+});
+document.getElementById('visitLoginBtn').addEventListener('click', async () => {
+  if (isVisitor) {
+    isVisitor = false;
+    sessionStorage.removeItem('village_visitor_mode');
+    updateRoleUI();
+    renderMarkers();
+    alert('已退出走访模式');
+    return;
+  }
+  const code = prompt('请输入走访口令');
+  if (!code) return;
+  try { ensureCloudClients(); } catch (error) { alert(error.message); return; }
+  try {
+    await ensureCloudSession();
+    const { data, error } = await cloudDb.from('villages').select('visit_passcode').eq('id', VILLAGE_ID).single();
+    if (error) throw cloudError(error, '无法读取走访口令配置');
+    const expected = data?.visit_passcode;
+    if (!expected) { alert('走访口令尚未配置，请编辑者先在 villages 表设置 visit_passcode'); return; }
+    if (code !== expected) { alert('走访口令不正确'); return; }
+    isVisitor = true;
+    sessionStorage.setItem('village_visitor_mode', 'true');
+    updateRoleUI();
+    renderMarkers();
+    alert('走访人员登录成功，可无限投票');
+  } catch (error) { alert(error.message || '走访登录失败'); }
+});
+document.getElementById('editorLoginBtn').addEventListener('click', async () => {
+  try { ensureCloudClients(); } catch (error) { alert(error.message); return; }
+  if (isEditor) {
+    isEditor = false; addMode = false; sessionStorage.removeItem('village_editor_mode');
+    await cloudAuth.signOut(); cloudInitPromise = null; cloudUserId = null;
+    document.getElementById('addModeBtn').textContent = '添加点位'; updateRoleUI();
+    try { await ensureCloudSession(true); await loadCloudData(); } catch (error) { alert(error.message || '村民模式连接失败'); }
+    return;
+  }
+  const username = prompt('请输入编辑者账号');
+  if (!username) return;
+  const password = prompt('请输入编辑者密码');
+  if (!password) return;
+  (async () => {
+    try {
+      const { data, error } = await cloudAuth.signInWithPassword({ username, password });
+      if (error) throw cloudError(error, '账号或密码不正确');
+      const session = data?.session;
+      const uid = session?.user?.id;
+      if (!uid) throw new Error('登录未返回有效账号，请检查 CloudBase 登录配置');
+      const { data: rows, error: roleError } = await cloudDb.from('editors').select('user_uid').eq('user_uid', uid);
+      if (roleError) throw cloudError(roleError, '无法验证编辑权限');
+      if (!rows?.length) {
+        await cloudAuth.signOut();
+        throw new Error('此账号没有花木村编辑权限');
+      }
+      cloudInitPromise = Promise.resolve(session); cloudUserId = uid;
+      isEditor = true; sessionStorage.setItem('village_editor_mode', 'true');
+      updateRoleUI(); await loadCloudData(); alert('编辑者登录成功');
+    } catch (error) { alert(error.message || '编辑者登录失败'); }
+  })();
+});
+document.getElementById('editorLogoutBtn').addEventListener('click', async () => {
+  isEditor = false; addMode = false; sessionStorage.removeItem('village_editor_mode');
+  await cloudAuth.signOut(); cloudInitPromise = null; cloudUserId = null;
+  document.getElementById('addModeBtn').textContent = '添加点位'; updateRoleUI();
+  try { await ensureCloudSession(true); await loadCloudData(); } catch (error) { alert(error.message || '村民模式连接失败'); }
+});
+document.getElementById('addModeBtn').addEventListener('click', (e) => {
+  addMode = !addMode;
+  e.target.textContent = addMode ? '点击地图放置点位' : '添加点位';
+  e.target.style.background = addMode ? '#2a9d4a' : 'var(--btn-bg)';
+  e.target.style.color = addMode ? '#fff' : 'var(--btn-text)';
+});
+
+document.getElementById('clearBtn').addEventListener('click', async () => {
+  if (!isEditor || !confirm('确定删除花木村地图和全部点位、作品吗？此操作无法撤销。')) return;
+  try {
+    const { error } = await cloudDb.from('villages').update({ map_image_url: null, updated_at: new Date().toISOString() }).eq('id', VILLAGE_ID);
+    if (error) throw cloudError(error, '清除地图失败');
+    const { error: spotsError } = await cloudDb.from('spots').delete().eq('village_id', VILLAGE_ID);
+    if (spotsError) throw cloudError(spotsError, '清除点位失败');
+    state = { image: null, spots: [] }; cacheCloudState(); loadImageAndRender(null); renderMarkers();
+    alert('花木村地图和点位已清除');
+  } catch (error) { alert(error.message || '清空失败'); }
+});
+/* ================== 投票面板逻辑 ================== */
+const spotListElement = document.getElementById('spotList');
+function renderSidebar() {
+  const spots = state.spots || [];
+  document.getElementById('pointCount').textContent = spots.length;
+  document.getElementById('listPointCount').textContent = spots.length;
+  document.getElementById('mapFootCount').textContent = `${spots.length} 个点位`;
+  document.getElementById('groupCount').textContent = spots.reduce((sum, spot) => sum + (spot.works?.length || 0), 0);
+  document.getElementById('myVoteCount').textContent = spots.filter(spot => spot.hasVoted).length;
+  spotListElement.replaceChildren();
+  if (!spots.length) {
+    const empty = document.createElement('div'); empty.className = 'list-empty';
+    empty.textContent = isEditor ? '登录后上传地图并添加点位' : '地图点位开放后会显示在这里';
+    spotListElement.appendChild(empty); return;
+  }
+  spots.forEach((spot, index) => {
+    const row = document.createElement('button'); row.type = 'button'; row.className = 'spot-row';
+    const icon = document.createElement('span'); icon.className = 'spot-icon'; icon.textContent = ['⌑','⌁','♧','✳'][index % 4];
+    const copy = document.createElement('span'); copy.className = 'spot-copy';
+    const name = document.createElement('strong'); name.textContent = spot.name || `点位${index + 1}`;
+    const sub = document.createElement('small'); sub.textContent = `${spot.works?.length || 0} 个作品 · ${spot.hasVoted ? '已参与' : '点击查看并参与'}`;
+    copy.append(name, sub);
+    const arrow = document.createElement('span'); arrow.className = 'spot-arrow'; arrow.textContent = '›';
+    row.append(icon, copy, arrow); row.addEventListener('click', () => { document.body.classList.remove('show-spot-drawer'); spotListToggle.setAttribute('aria-expanded', 'false'); openPanel(spot.id); });
+    spotListElement.appendChild(row);
+  });
+}
+document.getElementById('guideBtn').addEventListener('click', () => alert('参与方式：在地图上点击点位，选择喜欢的作品投票，或录音发表意见。管理员登录后可以上传地图、添加或删除点位，并上传作品图片。'));
+const spotListToggle = document.getElementById('spotListToggle');
+spotListToggle.addEventListener('click', () => { const opened = document.body.classList.toggle('show-spot-drawer'); spotListToggle.setAttribute('aria-expanded', String(opened)); });
+const panelMask = document.getElementById('panelMask');
+const imagePreview = document.getElementById('imagePreview');
+const imagePreviewImg = document.getElementById('imagePreviewImg');
+let previewWorks = [];
+let previewIndex = 0;
+function showPreviewImage(index) {
+  if (!previewWorks.length) return;
+  previewIndex = (index + previewWorks.length) % previewWorks.length;
+  const work = previewWorks[previewIndex];
+  imagePreviewImg.src = work.image_url;
+  imagePreviewImg.alt = work.title || '方案图片';
+  document.getElementById('imagePreviewCaption').textContent = `${work.title || '方案'}  ·  ${previewIndex + 1}/${previewWorks.length}`;
+}
+function openWorkGallery(spot, workId) {
+  previewWorks = (spot.works || []).filter(work => work.image_url);
+  if (!previewWorks.length) return;
+  showPreviewImage(Math.max(0, previewWorks.findIndex(work => work.id === workId)));
+  imagePreview.classList.remove('hidden');
+}
+function closeImagePreview() { imagePreview.classList.add('hidden'); imagePreviewImg.removeAttribute('src'); previewWorks = []; }
+document.getElementById('closeImagePreview').addEventListener('click',closeImagePreview);
+document.getElementById('prevPreviewImage').addEventListener('click',()=>showPreviewImage(previewIndex-1));
+document.getElementById('nextPreviewImage').addEventListener('click',()=>showPreviewImage(previewIndex+1));
+imagePreview.addEventListener('click',event=>{if(event.target===imagePreview)closeImagePreview();});
+window.addEventListener('keydown',event=>{
+  if(imagePreview.classList.contains('hidden')) return;
+  if(event.key==='Escape') closeImagePreview();
+  else if(event.key==='ArrowLeft') showPreviewImage(previewIndex-1);
+  else if(event.key==='ArrowRight') showPreviewImage(previewIndex+1);
+});
+const mainGrid = document.getElementById('mainGrid');
+const submitBtn = document.getElementById('submitBtn');
+const votedMsg = document.getElementById('votedMsg');
+
+function openPanel(spotId) {
+  currentSpotId = spotId;
+  selectedWorkId = null;
+  currentVoiceData = null;
+  renderPanel();
+  panelMask.classList.add('show');
+}
+
+function closePanelFunc() {
+  panelMask.classList.remove('show');
+  if(mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop();
+}
+
+document.getElementById('closePanel').onclick = closePanelFunc;
+function getBucketObjectPath(value, bucketId) {
+  if (!value || /^data:/i.test(value)) return null;
+  try {
+    const pathname = new URL(value, location.href).pathname;
+    const marker = '/' + bucketId + '/';
+    const at = pathname.indexOf(marker);
+    return at < 0 ? null : decodeURIComponent(pathname.slice(at + marker.length));
+  } catch { return null; }
+}
+async function removeBucketObjects(bucket, paths) {
+  const uniquePaths = [...new Set(paths.filter(Boolean))];
+  if (!uniquePaths.length) return;
+  const { error } = await bucket.remove(uniquePaths);
+  if (error) throw error;
+}
+document.getElementById('renameSpotBtn').addEventListener('click', async () => {
+  if (!isEditor) { alert('请先登录编辑者账号'); return; }
+  const spot = state.spots.find(item => item.id === currentSpotId);
+  if (!spot) return;
+  const name = document.getElementById('renameSpotInput').value.trim();
+  if (!name) { alert('点位名称不能为空'); return; }
+  if ([...name].length > 40) { alert('点位名称请控制在 40 个字以内'); return; }
+  if (name === spot.name) return;
+  const button = document.getElementById('renameSpotBtn');
+  button.disabled = true;
+  try {
+    const { data, error } = await cloudDb.from('spots').update({ name }).eq('id', spot.id).select('id,name').single();
+    if (error) throw cloudError(error, '保存失败：请确认管理员账号及 spots 表 UPDATE 权限');
+    if (!data) throw new Error('没有保存到云端，请检查管理员更新权限');
+    spot.name = data.name || name;
+    cacheCloudState();
+    renderMarkers();
+    renderPanel();
+    alert('点位名称已更新');
+  } catch (error) {
+    alert(error.message || '保存失败：请重新登录管理员，检查点位表 UPDATE 权限后重试');
+  } finally {
+    button.disabled = false;
+  }
+});
+document.getElementById('deleteSpotBtn').addEventListener('click', async () => {
+  if (!isEditor) return;
+  const spot = state.spots.find(item => item.id === currentSpotId);
+  if (!spot) return;
+  const button = document.getElementById('deleteSpotBtn');
+  button.disabled = true;
+  try {
+    await ensureCloudSession();
+    const [worksResult, votesResult, feedbackResult] = await Promise.all([
+      cloudDb.from('works').select('image_url').eq('spot_id', spot.id),
+      cloudDb.from('votes').select('id').eq('spot_id', spot.id),
+      cloudDb.from('feedback').select('voice_url').eq('spot_id', spot.id)
+    ]);
+    for (const result of [worksResult, votesResult, feedbackResult]) {
+      if (result.error) throw result.error;
+    }
+    const workCount = worksResult.data?.length || 0;
+    const voteCount = votesResult.data?.length || 0;
+    const feedbackCount = feedbackResult.data?.length || 0;
+    const message = `确定删除“${spot.name}”吗？\n将同时删除 ${workCount} 个作品、${voteCount} 票和 ${feedbackCount} 条意见记录，无法恢复。`;
+    if (!confirm(message)) return;
+
+    const { error } = await cloudDb.from('spots').delete().eq('id', spot.id);
+    if (error) throw cloudError(error, '删除点位失败');
+
+    const imagePaths = (worksResult.data || []).map(row => getBucketObjectPath(row.image_url, IMAGE_BUCKET_ID));
+    const voicePaths = (feedbackResult.data || []).map(row => row.voice_url && !/^data:|^https?:/i.test(row.voice_url) ? row.voice_url : null);
+    state.spots = state.spots.filter(item => item.id !== spot.id);
+    cacheCloudState();
+    closePanelFunc();
+    renderMarkers();
+
+    const cleanupErrors = [];
+    try { await removeBucketObjects(imageBucket, imagePaths); } catch (cleanupError) { cleanupErrors.push(cleanupError); }
+    try { await removeBucketObjects(voiceBucket, voicePaths); } catch (cleanupError) { cleanupErrors.push(cleanupError); }
+    if (cleanupErrors.length) alert('点位及相关记录已删除；部分图片或语音文件未能清理，请检查云存储。');
+    else alert('点位及相关作品、投票和意见已删除');
+  } catch (error) {
+    alert(error.message || '删除点位失败，请确认编辑者权限后重试');
+  } finally {
+    button.disabled = false;
+  }
+});
+
+// 点击黑框外部（遮罩层）关闭弹窗
+panelMask.addEventListener('click', (e) => { 
+  if (e.target === panelMask) {
+    closePanelFunc(); 
+  }
+});
+
+function compressWorkImage(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('无法读取图片'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('图片格式无法识别'));
+      img.onload = () => {
+        const ratio = Math.min(1, 900 / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * ratio); canvas.height = Math.round(img.height * ratio);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        const data = canvas.toDataURL('image/jpeg', 0.7);
+        if (data.length > 950000) reject(new Error('图片太大，请选取较小图片或先压缩后上传'));
+        else resolve(data);
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+function renderPanel() {
+  const spot = state.spots.find(s => s.id === currentSpotId);
+  if (!spot) return;
+  
+  document.getElementById('panelTitle').textContent = spot.name;
+  document.getElementById('renameSpotInput').value = spot.name || '';
+  document.getElementById('spotEditorActions').classList.toggle('hidden', !isEditor);
+  mainGrid.innerHTML = '';
+  
+  const isLocked = spot.hasVoted && !isVisitor;
+  
+  submitBtn.classList.remove('show');
+  submitBtn.textContent = currentVoiceData ? '提交语音意见' : '提交我的选择';
+  votedMsg.classList.remove('show');
+  if (isLocked) votedMsg.classList.add('show');
+  if (currentVoiceData || (!isLocked && selectedWorkId)) submitBtn.classList.add('show');
+
+  if (!Array.isArray(spot.works)) spot.works = [];
+  [1, 2, 3].forEach((num, idx) => {
+    const work = spot.works[idx];
+    if (!work) return;
+    const div = document.createElement('div');
+    div.className = 'work-card';
+    if (spot.votedWorkId === work.id) div.classList.add('selected');
+    if (isLocked) div.classList.add('locked');
+    const imageBox = document.createElement('div');
+    imageBox.className = `work-img img-${idx + 1}`;
+    if (work.image_url) {
+      imageBox.classList.add('has-photo');
+      const photo = document.createElement('img'); photo.src = work.image_url; photo.alt = work.title || `作品${num}`;
+      imageBox.appendChild(photo);
+      const expandButton=document.createElement('button'); expandButton.type='button'; expandButton.className='image-expand-btn'; expandButton.setAttribute('aria-label','放大查看完整图片'); expandButton.textContent='⛶';
+      expandButton.addEventListener('click',event=>{event.stopPropagation();openWorkGallery(spot,work.id);});
+      imageBox.appendChild(expandButton);
+    } else {
+      imageBox.textContent = ['🏡','🌳','🌾'][idx];
+    }
+    const label = document.createElement('div');
+    label.className = 'card-label'; label.textContent = work.title || `作品${['一','二','三'][idx]}`;
+    div.append(imageBox, label);
+
+    if (isEditor) {
+      div.classList.add('editor-photo');
+      const picker = document.createElement('input'); picker.type = 'file'; picker.accept = 'image/*'; picker.className = 'hidden';
+      picker.setAttribute('aria-label', `为${label.textContent}选择图片`);
+      picker.addEventListener('click', event => event.stopPropagation());
+      picker.addEventListener('change', async (event) => {
+        const file = event.target.files?.[0]; if (!file) return;
+        if (!file.type.startsWith('image/')) { alert('请选择图片文件'); return; }
+        try {
+          const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+          const path = 'works/' + spot.id + '/' + work.id + '-' + Date.now() + '.' + ext;
+          await uploadCloudFile(imageBucket, path, file, file.type);
+          const url = publicImageUrl(path);
+          const { error } = await cloudDb.from('works').update({ image_url: url, updated_at: new Date().toISOString() }).eq('id', work.id);
+          if (error) throw cloudError(error, '作品图片已上传，但保存失败');
+          work.image_url = url; renderPanel();
+        } catch (error) { alert(error.message || '作品图片上传失败，请先确认图片桶已建立'); }
+      });
+      div.appendChild(picker);
+      const editHint = document.createElement('small'); editHint.textContent = work.image_url ? '点击更换图片' : '点击添加图片';
+      editHint.style.cssText = 'font-size:11px;color:#66816a;margin-top:5px'; div.appendChild(editHint);
+      div.onclick = () => picker.click();
+    } else if (!isLocked) {
+      div.onclick = () => {
+        selectedWorkId = work.id;
+        document.querySelector('.voice-card')?.classList.remove('selected');
+        document.querySelectorAll('.work-card').forEach(card => card.classList.remove('selected'));
+        div.classList.add('selected'); submitBtn.classList.add('show');
+      };
+    }
+    mainGrid.appendChild(div);
+  });
+
+  const voiceDiv = document.createElement('div');
+  voiceDiv.className = 'voice-card';
+  voiceDiv.innerHTML = `<div class="icon">🎙️</div><div class="text">${currentVoiceData ? '已录好' : '语音意见'}</div><div class="card-label">${currentVoiceData ? '录好了，可提交' : (isRecording ? '再点一次结束录音' : '点一下开始录音，可多次提交')}</div>`;
+  voiceDiv.onclick = () => {
+    if (isRecording) mediaRecorder.stop();
+    else startRecording(voiceDiv);
+  };
+  mainGrid.appendChild(voiceDiv);
+}
+
+submitBtn.onclick = async () => {
+  try { ensureCloudClients(); } catch (error) { alert(error.message); return; }
+  const spot = state.spots.find(s => s.id === currentSpotId);
+  if (!spot || (!selectedWorkId && !currentVoiceData)) return;
+  submitBtn.disabled = true;
+  try {
+    await ensureCloudSession();
+    // 语音意见独立于投票，可重复提交；优先提交本次录音。
+    if (currentVoiceData) {
+      const blob = await (await fetch(currentVoiceData)).blob();
+      const ext = blob.type.includes('ogg') ? 'ogg' : blob.type.includes('mp4') ? 'm4a' : 'webm';
+      const audioFile = new File([blob], `voice-${Date.now()}.${ext}`, { type: blob.type || 'audio/webm' });
+      const path = `${spot.id}/${cloudUserId}-${Date.now()}.${ext}`;
+      await uploadCloudFile(voiceBucket, path, audioFile, audioFile.type);
+      const { error } = await cloudDb.from('feedback').insert({ spot_id: spot.id, voice_url: path });
+      if (error) throw cloudError(error, '语音上传成功，但意见提交失败');
+      currentVoiceData = null;
+      alert('语音意见已提交，可继续录入并多次提交');
+    } else {
+      if (spot.hasVoted && !isVisitor) throw new Error('这个点位您已经投过票啦');
+      const votePayload = { spot_id: spot.id, work_id: selectedWorkId };
+      if (isVisitor) votePayload.vote_role = 'visitor';
+      const { error } = await cloudDb.from('votes').insert(votePayload);
+      if (error) {
+        if (error.code === '23505' || /duplicate|unique/i.test(error.message || '')) {
+          if (isVisitor) throw cloudError(error, '走访投票失败，请确认数据库唯一约束已改为部分唯一索引');
+          throw new Error('这个点位您已经投过票啦');
+        }
+        throw cloudError(error, '投票提交失败');
+      }
+      voteRows.push({ spot_id: spot.id, work_id: selectedWorkId });
+      spot.votedWorkId = selectedWorkId;
+      spot.hasVoted = true;
+      selectedWorkId = null;
+      if (isVisitor) alert('走访投票已记录，可继续投票');
+    }
+    cacheCloudState(); renderMarkers(); renderPanel();
+  } catch (error) { alert(error.message || '提交失败，请稍后重试'); }
+  finally { submitBtn.disabled = false; }
+};
+async function startRecording(cardElement) {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const chunks = [];
+    mediaRecorder = new MediaRecorder(stream);
+    
+    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+    mediaRecorder.onstop = () => {
+      stream.getTracks().forEach(t => t.stop());
+      isRecording = false;
+      
+      const blob = new Blob(chunks, { type: 'audio/webm' });
+      if (blob.size < 500) return;
+      
+      const reader = new FileReader();
+      reader.onload = () => {
+        currentVoiceData = reader.result;
+        renderPanel();
+        mainGrid.querySelector('.voice-card')?.classList.add('selected');
+        submitBtn.classList.add('show');
+      };
+      reader.readAsDataURL(blob);
+    };
+    
+    mediaRecorder.start();
+    isRecording = true;
+    
+    cardElement.classList.add('recording');
+    cardElement.setAttribute('aria-label','正在录音，再点一次结束');
+    cardElement.innerHTML = `<div class="icon">⏹️</div><div class="text" style="color:#f33;">正在录音</div><div class="card-label">再点一次结束</div>`;
+    // 由村民再次点击语音卡片结束录音，不自动截断。
+    
+  } catch (err) {
+    alert('无法使用麦克风，请检查权限设置。');
+  }
+}
+
+/* 初始化启动：优先从花木村云端读取 */
+updateRoleUI();
+loadImageAndRender(null);
+(async () => {
+  try {
+    await ensureCloudSession(true);
+    cloudReady = true;
+    await loadCloudData();
+  } catch (error) {
+    console.error('CloudBase initialization failed', error);
+    setCloudStatus('云端连接失败：' + (error.message || '请刷新重试'));
+    alert(`云端暂时连接不上：${error.message || '请检查匿名登录、数据权限和公开密钥'}`);
+  }
+})();</script>
+</body>
+</html>

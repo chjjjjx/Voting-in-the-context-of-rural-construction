@@ -1,0 +1,27 @@
+# 本地配置：含个人云环境信息，切勿提交
+config.js
+.env
+.env.*
+!.env.example
+
+# 系统 / 编辑器
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 依赖与构建产物
+node_modules/
+dist/
+build/
+coverage/
+*.log
+
+# 本地草稿与备份
+*.local.html
+backup/
+backups/
+*.bak
